@@ -1,0 +1,275 @@
+diff --git a/common/core/memory_subsystem/parametric_dram_directory_msi/cache_cntlr.cc b/common/core/memory_subsystem/parametric_dram_directory_msi/cache_cntlr.cc
+index e062709..39c5c5c 100644
+--- a/common/core/memory_subsystem/parametric_dram_directory_msi/cache_cntlr.cc
++++ b/common/core/memory_subsystem/parametric_dram_directory_msi/cache_cntlr.cc
+@@ -1502,7 +1502,7 @@ MYLOG("evict FLUSH %lx", evict_address);
+                   home_node_id /* receiver */,
+                   evict_address,
+                   evict_buf, getCacheBlockSize(),
+-                  HitWhere::UNKNOWN, NULL, thread_num);
++                  HitWhere::UNKNOWN, &m_dummy_shmem_perf, thread_num);
+          }
+          else
+          {
+@@ -1516,7 +1516,7 @@ MYLOG("evict INV %lx", evict_address);
+                   home_node_id /* receiver */,
+                   evict_address,
+                   NULL, 0,
+-                  HitWhere::UNKNOWN, NULL, thread_num);
++                  HitWhere::UNKNOWN, &m_dummy_shmem_perf, thread_num);
+          }
+       }
+ 
+diff --git a/common/core/memory_subsystem/parametric_dram_directory_msi/cache_cntlr.h b/common/core/memory_subsystem/parametric_dram_directory_msi/cache_cntlr.h
+index 391940c..3df5557 100644
+--- a/common/core/memory_subsystem/parametric_dram_directory_msi/cache_cntlr.h
++++ b/common/core/memory_subsystem/parametric_dram_directory_msi/cache_cntlr.h
+@@ -16,6 +16,7 @@
+ #include "req_queue_list_template.h"
+ #include "stats.h"
+ #include "subsecond_time.h"
++#include "shmem_perf.h"
+ 
+ #include "boost/tuple/tuple.hpp"
+ 
+@@ -270,6 +271,7 @@ namespace ParametricDramDirectoryMSI
+          ShmemPerf* m_shmem_perf_global;
+          SubsecondTime m_shmem_perf_totaltime;
+          UInt64 m_shmem_perf_numrequests;
++         ShmemPerf m_dummy_shmem_perf;
+ 
+          ShmemPerfModel* m_shmem_perf_model;
+ 
+diff --git a/common/core/memory_subsystem/parametric_dram_directory_msi/memory_manager.cc b/common/core/memory_subsystem/parametric_dram_directory_msi/memory_manager.cc
+index 81cb474..eeedfd3 100644
+--- a/common/core/memory_subsystem/parametric_dram_directory_msi/memory_manager.cc
++++ b/common/core/memory_subsystem/parametric_dram_directory_msi/memory_manager.cc
+@@ -445,7 +445,7 @@ MemoryManager::handleMsgFromNetwork(NetPacket& packet)
+ {
+ MYLOG("begin");
+    core_id_t sender = packet.sender;
+-   PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg = PrL1PrL2DramDirectoryMSI::ShmemMsg::getShmemMsg((Byte*) packet.data);
++   PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg = PrL1PrL2DramDirectoryMSI::ShmemMsg::getShmemMsg((Byte*) packet.data, &m_dummy_shmem_perf);
+    SubsecondTime msg_time = packet.time;
+ 
+    getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_SIM_THREAD, msg_time);
+diff --git a/common/core/memory_subsystem/parametric_dram_directory_msi/memory_manager.h b/common/core/memory_subsystem/parametric_dram_directory_msi/memory_manager.h
+index 3766c54..478a521 100644
+--- a/common/core/memory_subsystem/parametric_dram_directory_msi/memory_manager.h
++++ b/common/core/memory_subsystem/parametric_dram_directory_msi/memory_manager.h
+@@ -52,6 +52,8 @@ namespace ParametricDramDirectoryMSI
+          MemComponent::component_t m_last_level_cache;
+          bool m_enabled;
+ 
++         ShmemPerf m_dummy_shmem_perf;
++
+          // Performance Models
+          CachePerfModel* m_cache_perf_models[MemComponent::LAST_LEVEL_CACHE + 1];
+ 
+diff --git a/common/core/memory_subsystem/parametric_dram_directory_msi/nuca_cache.cc b/common/core/memory_subsystem/parametric_dram_directory_msi/nuca_cache.cc
+index c0879d8..ddd99d6 100644
+--- a/common/core/memory_subsystem/parametric_dram_directory_msi/nuca_cache.cc
++++ b/common/core/memory_subsystem/parametric_dram_directory_msi/nuca_cache.cc
+@@ -92,7 +92,7 @@ NucaCache::write(IntPtr address, Byte* data_buf, bool& eviction, IntPtr& evict_a
+       block_info->setCState(CacheState::MODIFIED);
+       m_cache->accessSingleLine(address, Cache::STORE, data_buf, m_cache_block_size, now + latency, true);
+ 
+-      latency += accessDataArray(Cache::STORE, now + latency, NULL);
++      latency += accessDataArray(Cache::STORE, now + latency, &m_dummy_shmem_perf);
+       hit_where = HitWhere::NUCA_CACHE;
+    }
+    else
+diff --git a/common/core/memory_subsystem/parametric_dram_directory_msi/nuca_cache.h b/common/core/memory_subsystem/parametric_dram_directory_msi/nuca_cache.h
+index f60fb6e..fad0cf6 100644
+--- a/common/core/memory_subsystem/parametric_dram_directory_msi/nuca_cache.h
++++ b/common/core/memory_subsystem/parametric_dram_directory_msi/nuca_cache.h
+@@ -31,6 +31,8 @@ class NucaCache
+ 
+       UInt64 m_reads, m_writes, m_read_misses, m_write_misses;
+ 
++      ShmemPerf m_dummy_shmem_perf;
++
+       SubsecondTime accessDataArray(Cache::access_t access, SubsecondTime t_start, ShmemPerf *perf);
+ 
+    public:
+diff --git a/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/dram_cntlr.cc b/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/dram_cntlr.cc
+index a060573..f8de56f 100644
+--- a/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/dram_cntlr.cc
++++ b/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/dram_cntlr.cc
+@@ -5,6 +5,7 @@
+ #include "subsecond_time.h"
+ #include "stats.h"
+ #include "fault_injection.h"
++#include "shmem_perf.h"
+ 
+ #if 0
+    extern Lock iolock;
+@@ -93,7 +94,7 @@ DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, Su
+          m_fault_injector->postWrite(address, address, getCacheBlockSize(), (Byte*)m_data_map[address], now);
+    }
+ 
+-   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, WRITE, NULL);
++   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, WRITE, &m_dummy_shmem_perf);
+ 
+    ++m_writes;
+    #ifdef ENABLE_DRAM_ACCESS_COUNT
+diff --git a/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/dram_cntlr.h b/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/dram_cntlr.h
+index 04152f5..3379a9d 100644
+--- a/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/dram_cntlr.h
++++ b/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/dram_cntlr.h
+@@ -7,6 +7,7 @@
+ 
+ #include "dram_perf_model.h"
+ #include "shmem_msg.h"
++#include "shmem_perf.h"
+ #include "fixed_types.h"
+ #include "memory_manager_base.h"
+ #include "dram_cntlr_interface.h"
+@@ -27,6 +28,8 @@ namespace PrL1PrL2DramDirectoryMSI
+          AccessCountMap* m_dram_access_count;
+          UInt64 m_reads, m_writes;
+ 
++         ShmemPerf m_dummy_shmem_perf;
++
+          SubsecondTime runDramPerfModel(core_id_t requester, SubsecondTime time, IntPtr address, DramCntlrInterface::access_t access_type, ShmemPerf *perf);
+ 
+          void addToDramAccessCount(IntPtr address, access_t access_type);
+diff --git a/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/dram_directory_cntlr.cc b/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/dram_directory_cntlr.cc
+index 2c78061..d6a96a6 100644
+--- a/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/dram_directory_cntlr.cc
++++ b/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/dram_directory_cntlr.cc
+@@ -294,7 +294,7 @@ DramDirectoryCntlr::processDirectoryEntryAllocationReq(ShmemReq* shmem_req)
+    // We get the entry with the lowest number of sharers
+    DirectoryEntry* directory_entry = m_dram_directory_cache->replaceDirectoryEntry(replaced_address, address, true);
+ 
+-   ShmemMsg nullify_msg(ShmemMsg::NULLIFY_REQ, MemComponent::TAG_DIR, MemComponent::TAG_DIR, requester, replaced_address, NULL, 0, NULL);
++   ShmemMsg nullify_msg(ShmemMsg::NULLIFY_REQ, MemComponent::TAG_DIR, MemComponent::TAG_DIR, requester, replaced_address, NULL, 0, &m_dummy_shmem_perf);
+ 
+    ShmemReq* nullify_req = new ShmemReq(&nullify_msg, msg_time);
+ 
+diff --git a/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/shmem_msg.cc b/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/shmem_msg.cc
+index 542016c..6aab5dc 100644
+--- a/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/shmem_msg.cc
++++ b/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/shmem_msg.cc
+@@ -1,10 +1,11 @@
+ #include <string.h>
+ #include "shmem_msg.h"
++#include "shmem_perf.h"
+ #include "log.h"
+ 
+ namespace PrL1PrL2DramDirectoryMSI
+ {
+-   ShmemMsg::ShmemMsg() :
++   ShmemMsg::ShmemMsg(ShmemPerf* perf) :
+       m_msg_type(INVALID_MSG_TYPE),
+       m_sender_mem_component(MemComponent::INVALID_MEM_COMPONENT),
+       m_receiver_mem_component(MemComponent::INVALID_MEM_COMPONENT),
+@@ -13,7 +14,7 @@ namespace PrL1PrL2DramDirectoryMSI
+       m_address(INVALID_ADDRESS),
+       m_data_buf(NULL),
+       m_data_length(0),
+-      m_perf(NULL)
++      m_perf(perf)
+    {}
+ 
+    ShmemMsg::ShmemMsg(msg_t msg_type,
+@@ -50,9 +51,9 @@ namespace PrL1PrL2DramDirectoryMSI
+    {}
+ 
+    ShmemMsg*
+-   ShmemMsg::getShmemMsg(Byte* msg_buf)
++   ShmemMsg::getShmemMsg(Byte* msg_buf, ShmemPerf* perf)
+    {
+-      ShmemMsg* shmem_msg = new ShmemMsg();
++      ShmemMsg* shmem_msg = new ShmemMsg(perf);
+       memcpy((void*) shmem_msg, msg_buf, sizeof(*shmem_msg));
+       if (shmem_msg->getDataLength() > 0)
+       {
+diff --git a/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/shmem_msg.h b/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/shmem_msg.h
+index 6d9c849..215d131 100644
+--- a/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/shmem_msg.h
++++ b/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/shmem_msg.h
+@@ -52,7 +52,8 @@ namespace PrL1PrL2DramDirectoryMSI
+          ShmemPerf* m_perf;
+ 
+       public:
+-         ShmemMsg();
++         ShmemMsg() = delete;
++         ShmemMsg(ShmemPerf* perf);
+          ShmemMsg(msg_t msg_type,
+                MemComponent::component_t sender_mem_component,
+                MemComponent::component_t receiver_mem_component,
+@@ -65,7 +66,7 @@ namespace PrL1PrL2DramDirectoryMSI
+ 
+          ~ShmemMsg();
+ 
+-         static ShmemMsg* getShmemMsg(Byte* msg_buf);
++         static ShmemMsg* getShmemMsg(Byte* msg_buf, ShmemPerf* perf);
+          Byte* makeMsgBuf();
+          UInt32 getMsgLen();
+ 
+diff --git a/record-trace b/record-trace
+index fe5dd2b..de3a969 100755
+--- a/record-trace
++++ b/record-trace
+@@ -165,11 +165,11 @@ frontend_options_str = ' '.join(frontend_options)
+ # convert to absolute path
+ outputfile = os.path.realpath(os.path.join(outputfile))
+ 
+-pinoptions = '-mt -injection child -xyzzy -pause_tool 0 -ifeellucky'
++pinoptions = '-mt -injection child -xyzzy -ifeellucky'
+ if use_pid:
+   pinoptions += (' -pid %d' % (use_pid))
+ if use_gdb:
+-  pinoptions += ' -pause_tool 100'
++  pinoptions += ' -pause_tool 10'
+ if use_follow:
+   pinoptions += ' -follow_execv'
+ pinballoptions = ''
+diff --git a/sift/recorder/threads.cc b/sift/recorder/threads.cc
+index a1fe075..c160b75 100644
+--- a/sift/recorder/threads.cc
++++ b/sift/recorder/threads.cc
+@@ -22,6 +22,7 @@ thread_data_t *thread_data;
+ // The thread that watched this new thread start is responsible for setting up the connection with the simulator
+ static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
+ {
++   sift_assert(threadid < MAX_NUM_THREADS);
+    sift_assert(thread_data[threadid].bbv == NULL);
+ 
+    // The first thread (master) doesn't need to join with anyone else
+diff --git a/tools/debugpin.py b/tools/debugpin.py
+index e46ad22..9fac2ec 100644
+--- a/tools/debugpin.py
++++ b/tools/debugpin.py
+@@ -13,15 +13,16 @@ def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = Fa
+ 
+   p_graphite = subprocess.Popen([ 'bash', '-c', cmd ], bufsize = 1, stdout = subprocess.PIPE, env = env)
+   g_pid = 0
+-  g_symbols = ''
++  g_symbols = []
+   while True:
+     line = p_graphite.stdout.readline()
+     if line.startswith('Pausing to attach to pid') or (line.startswith('Pausing for') and 'to attach to process' in line):
+       g_pid = line.split()[-1]
+-    elif line.startswith('   add-symbol-file'):
+-      g_symbols = line
+-    if g_pid and g_symbols:
+-      break
++    elif ('add-symbol-file' in line) or ('file' in line) or ('set' in line):
++      g_symbols.append(line.rstrip())
++    else:
++      if g_pid and g_symbols:
++        break
+ 
+   def output_graphite():
+     while True:
+@@ -32,7 +33,7 @@ def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = Fa
+ 
+   fh, fn = tempfile.mkstemp()
+   f = open(fn, 'w')
+-  f.write('attach %s\n%s\n' % (g_pid, g_symbols))
++  f.write('attach %s\n%s\n' % (g_pid, '\n'.join(g_symbols)))
+   if not wait:
+     f.write('continue\n')
+   # Only quit GDB when we have not seen a signal
