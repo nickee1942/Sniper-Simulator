@@ -1,4 +1,4 @@
-Notice: The official website of Sniper has a guide of installation. However, it is out of date. It only fit old Sniper versions. If you choose Sniper 7.1, do not follow their instruction.  
+Notice: The official website of Sniper has a guide of installation. However, it is out of date. It only fits old Sniper versions. If you choose Sniper 7.1, do not follow their instruction.  
 ----------------------------------------------------  
 Environment  
 Ubuntu 18.04  
