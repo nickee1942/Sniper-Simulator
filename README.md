@@ -16,7 +16,7 @@ $sudo apt-get install lib32z1-dev
 $make  
 * If make failed, there will be a notice for the missing part, install those missing part.  
 * If "usr/bin/env: ‘python’: No such file or directory", check your environment. Usually, if your python version is higher, it cannot be detected. Use following command to install python  
-// $sudo apt-get install python-minimal  
+$sudo apt-get install python-minimal  
 # Test
 $cd test/fft  
 $make run  
